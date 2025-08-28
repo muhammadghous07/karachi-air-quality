@@ -1,3 +1,5 @@
+# File: src/model_training.py
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import TimeSeriesSplit
@@ -20,17 +22,35 @@ class ModelTrainer:
         
     def load_data(self):
         """Load engineered features"""
-        self.data = pd.read_csv('data/processed/engineered_features.csv', index_col='date', parse_dates=True)
+        self.data = pd.read_csv('../data/processed/engineered_features.csv', index_col='date', parse_dates=True)
         return self
     
     def prepare_data(self, target='pm25', test_size=0.2):
-        """Prepare data for training"""
+        """Prepare data for training with a fixed set of features"""
         print(f"Preparing data for target: {target}")
         
-        # Define features and target
-        exclude_targets = ['pm25', 'pm10', 'no2', 'so2', 'o3', 'aqi',
-                         'respiratory_cases', 'cardiovascular_cases', 'mortality_rate']
-        feature_cols = [col for col in self.data.columns if col not in exclude_targets]
+        # --- FIX: Define a fixed list of features that the frontend can provide ---
+        feature_cols = [
+            'temperature', 'humidity', 'wind_speed', 'precipitation', 
+            'holiday', 'year', 'month', 'day', 'day_of_week', 'day_of_year',
+            'week_of_year', 'quarter', 'month_sin', 'month_cos', 
+            'day_of_week_sin', 'day_of_week_cos', 'is_weekend'
+        ]
+        
+        # Ensure only the required features exist in the dataframe before proceeding
+        # Create these features if they don't already exist in the dataframe
+        self.data['year'] = self.data.index.year
+        self.data['month'] = self.data.index.month
+        self.data['day'] = self.data.index.day
+        self.data['day_of_week'] = self.data.index.dayofweek
+        self.data['day_of_year'] = self.data.index.dayofyear
+        self.data['week_of_year'] = self.data.index.isocalendar().week.astype(int)
+        self.data['quarter'] = self.data.index.quarter
+        self.data['month_sin'] = np.sin(2 * np.pi * self.data['month'] / 12)
+        self.data['month_cos'] = np.cos(2 * np.pi * self.data['month'] / 12)
+        self.data['day_of_week_sin'] = np.sin(2 * np.pi * self.data['day_of_week'] / 7)
+        self.data['day_of_week_cos'] = np.cos(2 * np.pi * self.data['day_of_week'] / 7)
+        self.data['is_weekend'] = (self.data['day_of_week'] >= 5).astype(int)
         
         X = self.data[feature_cols]
         y = self.data[target]
@@ -51,8 +71,6 @@ class ModelTrainer:
         
         # Define models
         models = {
-            'Linear Regression': LinearRegression(),
-            'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42),
             'XGBoost': XGBRegressor(n_estimators=100, random_state=42)
         }
         
@@ -92,25 +110,23 @@ class ModelTrainer:
     def save_models(self):
         """Save trained models to disk"""
         for name, model in self.models.items():
-            filename = f'models/{name.lower().replace(" ", "_")}_model.pkl'
+            # Naye model ko sahi jagah par save karen
+            filename = f'../models/basic_xgboost_model.pkl'
             joblib.dump(model, filename)
             print(f"Saved {name} to {filename}")
         
-        # --- FIX: Convert numpy float32 to native python float before saving ---
         serializable_feature_importance = {}
         for model_name, importance_dict in self.feature_importance.items():
             serializable_feature_importance[model_name] = {
                 feature: float(value) for feature, value in importance_dict.items()
             }
-            
-        # Save results
-        with open('models/model_results.json', 'w') as f:
+        
+        with open('../models/model_results.json', 'w') as f:
             json.dump(self.results, f, indent=4)
         
-        # Save feature importance
-        with open('models/feature_importance.json', 'w') as f:
+        with open('../models/feature_importance.json', 'w') as f:
             json.dump(serializable_feature_importance, f, indent=4)
-            
+        
         return self
     
     def plot_results(self, target='pm25'):
@@ -163,7 +179,7 @@ class ModelTrainer:
             axes[1, 1].set_title('Top 10 Features (XGBoost)')
         
         plt.tight_layout()
-        plt.savefig(f'models/model_performance_{target}.png', dpi=300, bbox_inches='tight')
+        plt.savefig(f'../models/model_performance_{target}.png', dpi=300, bbox_inches='tight')
         plt.show()
         
         return self
@@ -171,7 +187,7 @@ class ModelTrainer:
 # Run model training if script is executed directly
 if __name__ == "__main__":
     # Create models directory
-    os.makedirs('models', exist_ok=True)
+    os.makedirs('../models', exist_ok=True)
     
     # Train models for PM2.5 prediction
     trainer = ModelTrainer()

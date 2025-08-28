@@ -25,3 +25,6 @@ pyyaml>=6.0
 # Build dependencies (required for some packages)
 setuptools>=65.0.0
 wheel>=0.40.0
+
+streamlit
+requests

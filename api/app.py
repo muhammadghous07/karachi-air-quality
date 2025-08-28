@@ -4,11 +4,13 @@ import numpy as np
 from datetime import datetime, timedelta
 import joblib
 import os
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
-# Load trained model with the corrected path
-model = joblib.load('models/xgboost_model.pkl')
+# Load trained model with the corrected path for running from the 'api' folder
+model = joblib.load('../models/basic_xgboost_model.pkl')
 
 # Load feature columns used during training
 feature_cols = [
@@ -25,10 +27,7 @@ def home():
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        # Get data from request
         data = request.get_json()
-        
-        # Create DataFrame from input
         input_data = pd.DataFrame([data])
         
         # Convert date to datetime and extract features
@@ -38,7 +37,10 @@ def predict():
         input_data['day'] = input_data['date'].dt.day
         input_data['day_of_week'] = input_data['date'].dt.dayofweek
         input_data['day_of_year'] = input_data['date'].dt.dayofyear
-        input_data['week_of_year'] = input_data['date'].dt.isocalendar().week
+        
+        # isocalendar().week returns a tuple, so we need to get the week number
+        input_data['week_of_year'] = input_data['date'].dt.isocalendar().week.astype(int)
+        
         input_data['quarter'] = input_data['date'].dt.quarter
         
         # Cyclical encoding
@@ -50,12 +52,8 @@ def predict():
         # Weekend flag
         input_data['is_weekend'] = (input_data['day_of_week'] >= 5).astype(int)
         
-        # Ensure all required columns are present
-        for col in feature_cols:
-            if col not in input_data.columns:
-                input_data[col] = 0  # Default value for missing columns
-        
         # Select only the features used during training
+        # This also ensures the correct order
         input_data = input_data[feature_cols]
         
         # Make prediction
@@ -68,12 +66,15 @@ def predict():
         })
     
     except Exception as e:
-        return jsonify({'error': str(e)})
+        return jsonify({
+            'error': str(e),
+            'message': 'An error occurred during prediction. Please check your input data.',
+            'expected_features': feature_cols
+        })
 
 @app.route('/health_impact', methods=['POST'])
 def health_impact():
     try:
-        # Get prediction data
         data = request.get_json()
         pm25_level = data.get('pm25', 0)
         
@@ -110,4 +111,4 @@ def health_impact():
         return jsonify({'error': str(e)})
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000) 
